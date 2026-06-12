@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Le Loup Mal-Aimé — Runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f7f5ef;
+    --ink: #43434b;
+    --ink-soft: #8a8a92;
+    --rouge: #e2001a;
+    --night-ease: 600ms;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'VT323', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    padding: 24px;
+    overflow: hidden;
+  }
+  /* subtle paper grain */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: .35;
+    background-image:
+      radial-gradient(#00000007 1px, transparent 1px),
+      radial-gradient(#00000005 1px, transparent 1px);
+    background-size: 7px 7px, 11px 11px;
+    background-position: 0 0, 4px 6px;
+  }
+  header { text-align: center; user-select: none; }
+  .logo-pixel {
+    display: inline-block;
+    margin-bottom: 16px;
+    transform: skewX(-7deg);   /* l'italique du logo */
+    user-select: none;
+  }
+  .logo-pixel .word {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 15px;
+    letter-spacing: 1px;
+  }
+  .lg-ink { color: #1a1a1e; }
+  .lg-rouge { color: var(--rouge); }
+  .logo-swoosh {
+    height: 8px;
+    margin-top: 7px;
+    background: #1a1a1e;
+    clip-path: polygon(0 100%, 26% 0, 100% 0, 95% 100%);
+  }
+  .glitch-tag {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--rouge);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(18px, 4vw, 30px);
+    letter-spacing: 1px;
+    line-height: 1.45;
+  }
+  h1 .loup { color: var(--ink); }
+  h1 .rouge { color: var(--rouge); }
+  .sub {
+    margin-top: 12px;
+    font-size: 21px;
+    color: var(--ink-soft);
+  }
+  .frame {
+    position: relative;
+    border: 3px solid var(--ink);
+    box-shadow: 7px 7px 0 #43434b22;
+    background: #fff;
+    transition: filter var(--night-ease) ease;
+    line-height: 0;
+  }
+  .frame.night { filter: invert(1) hue-rotate(180deg); }
+  canvas {
+    display: block;
+    width: min(860px, 92vw);
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor: pointer;
+  }
+  footer {
+    font-size: 20px;
+    color: var(--ink-soft);
+    display: flex;
+    gap: 26px;
+    flex-wrap: wrap;
+    justify-content: center;
+    user-select: none;
+  }
+  footer b {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    padding: 4px 7px;
+    border-radius: 3px;
+    box-shadow: 0 2px 0 var(--ink);
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  .bonus-hint { color: #4f9d3f; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-pixel">
+    <div class="word"><span class="lg-ink">INTER</span><span class="lg-rouge">MARCHÉ</span></div>
+    <div class="logo-swoosh"></div>
+  </div>
+  <div class="glitch-tag">ERR_MOUSQUETAIRES_NOT_FOUND</div>
+  <h1><span class="loup">LE LOUP</span> <span class="rouge">MAL-AIMÉ</span></h1>
+  <div class="sub">Pas de connexion… mais le loup court toujours.</div>
+</header>
+
+<div class="frame" id="frame">
+  <canvas id="game" width="860" height="270"></canvas>
+</div>
+
+<footer>
+  <span><b>ESPACE</b> sauter</span>
+  <span><b>&darr;</b> se baisser</span>
+  <span class="bonus-hint">🥕 fruits &amp; légumes = +50</span>
+</footer>
+
+<script>
+"use strict";
+
+/* ============================================================
+   LE LOUP MAL-AIMÉ — un runner façon Chrome Dino
+   ============================================================ */
+
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const frame = document.getElementById("frame");
+ctx.imageSmoothingEnabled = false;
+
+const W = cv.width, H = cv.height;
+const GROUND_Y = 238;          // ligne du sol (pieds)
+const SCALE = 3;               // taille des pixels des sprites
+
+/* ---------- palette ---------- */
+const PAL = {
+  K: "#43434b",   // gris foncé (fourrure)
+  D: "#2c2c31",   // contour sombre
+  W: "#f6f3ec",   // blanc (museau, poitrail, pattes)
+  Y: "#ffc21c",   // oeil jaune
+  B: "#16161a",   // pupille / truffe
+  R: "#e2001a",   // écharpe rouge Intermarché
+  G: "#8a8a92",   // gris clair
+  O: "#e07a1f",   // orange carotte
+  C: "#b06f1e",   // brun (tige)
+  V: "#4f9d3f",   // vert (fanes, feuilles)
+  A: "#d4af37",   // or (chapeau de mousquetaire)
+  F: "#f4dd8a",   // or clair (plume)
+};
+
+/* ---------- sprites (1 caractère = 1 pixel) ---------- */
+
+const WOLF_BODY = [
+  "....................KK......",
+  "...................KWKK.....",
+  "...................KKKKK....",
+  "..WW...............KKKKKK..",
+  ".WWKK..............KKKYYKK.",
+  ".WKKKK............KKKKYBKK.",
+  "..KKKK...........KKKKKKKKBB",
+  "...KKKK.........KKKKWWWWWW.",
+  "....KKKKKKKKKKKKKKKKWWWW...",
+  "...KKKKKKKKKKKKKKKKRRRR....",
+  "...KKKKKKKKKKKKKKKRRRRR....",
+  "...KKKKKKKKKKKKKKKKWWR.....",
+  "....KKKKKKKKKKKKKKWWW......",
+  "....KKKKKKKKKKKKKWWW.......",
+  ".....KKKKKKKKKKKKWW........",
+];
+
+const LEGS_A = [
+  ".....KKK......KKK..........",
+  ".....KKK......KKK..........",
+  "......KK......KK...........",
+  "......KK.......KK..........",
+  ".....WW.........WW.........",
+];
+const LEGS_B = [
+  "......KKK....KKK...........",
+  ".......KK.....KK...........",
+  ".......KK......KK..........",
+  "........KK....KK...........",
+  "........WW......WW.........",
+];
+const LEGS_JUMP = [
+  ".....KKK......KKK..........",
+  "......KK......KK...........",
+  "......KKW.....KKW..........",
+  "...........................",
+  "...........................",
+];
+
+const WOLF_DUCK = [
+  "......................KK..........",
+  ".....................KKKK.........",
+  "..WW................KKKKKK........",
+  ".WWKK..............KKKKYYKKK......",
+  ".WKKKK...........KKKKKKYBKKK......",
+  "..KKKKKKKKKKKKKKKKKKKKKKKKKKKKBB..",
+  "...KKKKKKKKKKKKKKKKKKRRRKKWWWWW...",
+  "...KKKKKKKKKKKKKKKKKKRRRRWWWW.....",
+  "....KKKKKKKKKKKKKKKKKKKWWW........",
+];
+const DUCK_LEGS_A = [
+  ".....KKK......KKK.................",
+  "......KK......KK..................",
+  ".....WW.......WW..................",
+];
+const DUCK_LEGS_B = [
+  "......KKK....KKK..................",
+  ".......KK.....KK..................",
+  "........WW...WW...................",
+];
+
+const LAPIN_S = [
+  "...K..K....",
+  "...KK.KK...",
+  "...KK.KK...",
+  "..KKKKKKK..",
+  "..KBKKKKK..",
+  ".WWKKKKKK..",
+  "..KKKKKKK..",
+  "..KKKKKKKK.",
+  ".KKKWWWKKK.",
+  ".KKKWWWKKWW",
+  ".KKKWWWKKK.",
+  ".WW....WW..",
+];
+const LAPIN_L = [
+  "...KK...KK..",
+  "...KK...KK..",
+  "...KK...KK..",
+  "...KK..KK...",
+  "..KKKKKKKK..",
+  "..KBKKKKKK..",
+  ".WWKKKKKKK..",
+  "..KKKKKKKK..",
+  "..KKKKKKKKK.",
+  ".KKKWWWWKKK.",
+  ".KKKWWWWKKK.",
+  ".KKKWWWWKKWW",
+  ".KKKWWWWKKK.",
+  "..KKKKKKKK..",
+  "..WWW..WWW..",
+  "..WWW..WWW..",
+];
+
+const CADDIE = [
+  "............KKK.",
+  "..............K.",
+  "RRRRRRRRRRRRRRR.",
+  "K..K...K...K..K.",
+  "K..K...K...K..K.",
+  ".K.K...K...K.K..",
+  ".KKKKKKKKKKKKK..",
+  "...K.......K....",
+  "..KKK.....KKK...",
+  "..KKK.....KKK...",
+];
+
+const BIRD_A = [
+  "......KKK.........",
+  ".....KKKK.........",
+  "....KKKKKK........",
+  "..KKKKKKKKKKKKKK..",
+  ".KKKKKKKKKKKKWKBB.",
+  "..KKKWWWWKKKKK....",
+  "..................",
+  "..................",
+];
+const BIRD_B = [
+  "..................",
+  "..................",
+  "....KKKKKK........",
+  "..KKKKKKKKKKKKKK..",
+  ".KKKKKKKKKKKKWKBB.",
+  "..KKKWWWWKKKKK....",
+  ".....KKKK.........",
+  "......KKK.........",
+];
+
+const CAROTTE = [
+  "....VV..",
+  "..VVVV..",
+  "...VV...",
+  "..OOOO..",
+  "..OOOO..",
+  "..OOO...",
+  "...OOO..",
+  "...OO...",
+  "....O...",
+];
+const POMME = [
+  "....C....",
+  "...CCVV..",
+  ".RRRRRRR.",
+  "RRRRRRRRR",
+  "RRRRRRRRR",
+  ".RRRRRRR.",
+  "..RRRRR..",
+];
+
+const CHAPEAU = [
+  "...WWW................",
+  ".WWWWWWW..............",
+  "WWWFWWWWW.............",
+  ".WWWFWWWWW............",
+  "..WWWFWWWW.AAAAAA.....",
+  "....WWFWWWAAAAAAAA....",
+  "......WWWAAAAAAAAA....",
+  ".......WAAAAAAAAAA....",
+  ".........AAAAAAAAAA...",
+  "AAAAAAAAAAAAAAAAAAAAAA",
+  "...CCCCCCCCCCCCCCCC...",
+];
+
+const NUAGE = [
+  "....KKKKK.....",
+  "..KKKKKKKKK...",
+  ".KKKKKKKKKKKK.",
+  "KKKKKKKKKKKKKK",
+];
+
+/* ---------- pré-rendu des sprites ---------- */
+function bake(rows, scale, recolor) {
+  const w = Math.max(...rows.map(r => r.length));
+  const c = document.createElement("canvas");
+  c.width = w * scale;
+  c.height = rows.length * scale;
+  const g = c.getContext("2d");
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      let ch = row[x];
+      if (ch === ".") continue;
+      if (recolor && recolor[ch]) ch = recolor[ch];
+      g.fillStyle = PAL[ch] || PAL.K;
+      g.fillRect(x * scale, y * scale, scale, scale);
+    }
+  });
+  return c;
+}
+function stack(top, legs) { return top.concat(legs); }
+
+const SPR = {
+  wolfA:    bake(stack(WOLF_BODY, LEGS_A), SCALE),
+  wolfB:    bake(stack(WOLF_BODY, LEGS_B), SCALE),
+  wolfJump: bake(stack(WOLF_BODY, LEGS_JUMP), SCALE),
+  wolfDead: bake(stack(WOLF_BODY, LEGS_JUMP), SCALE, { Y: "W" }), // oeil écarquillé
+  duckA:    bake(stack(WOLF_DUCK, DUCK_LEGS_A), SCALE),
+  duckB:    bake(stack(WOLF_DUCK, DUCK_LEGS_B), SCALE),
+  lapinS:   bake(LAPIN_S, SCALE),
+  lapinL:   bake(LAPIN_L, SCALE),
+  caddie:   bake(CADDIE, SCALE),
+  birdA:    bake(BIRD_A, SCALE),
+  birdB:    bake(BIRD_B, SCALE),
+  carotte:  bake(CAROTTE, SCALE),
+  pomme:    bake(POMME, SCALE),
+  bonusUI:  bake(CAROTTE, 2),
+  chapeau:  bake(CHAPEAU, SCALE),
+  chapeauUI: bake(CHAPEAU, 2),
+  nuage:    bake(NUAGE, 2, { K: "G" }),
+};
+
+/* ---------- audio (bips façon Chrome) ---------- */
+let actx = null;
+function beep(freq, dur = 0.08, type = "square", vol = 0.04, when = 0) {
+  if (!actx) return;
+  const o = actx.createOscillator();
+  const g = actx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, actx.currentTime + when);
+  g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + when + dur);
+  o.connect(g).connect(actx.destination);
+  o.start(actx.currentTime + when);
+  o.stop(actx.currentTime + when + dur + 0.02);
+}
+function initAudio() {
+  if (!actx) {
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }
+}
+const sfx = {
+  jump:      () => beep(620, 0.09),
+  milestone: () => { beep(988, 0.07); beep(1319, 0.09, "square", 0.04, 0.08); },
+  bonus:     () => { beep(784, 0.06); beep(1175, 0.10, "square", 0.05, 0.06); },
+  mort:      () => { beep(196, 0.25, "sawtooth", 0.06); },
+  chapeau:   () => { beep(659, 0.08); beep(880, 0.08, "square", 0.04, 0.09); beep(1319, 0.14, "square", 0.05, 0.18); },
+  bouclier:  () => { beep(330, 0.10, "square", 0.05); beep(494, 0.08, "square", 0.04, 0.10); },
+};
+
+/* ---------- état du jeu ---------- */
+const SPEED_START = 5;      // départ déjà bien rythmé
+const SPEED_MAX = 13;
+const SPEED_ACCEL = 0.0014; // accélération continue par frame
+const SPEED_BUMP = 0.3;     // petit coup d'accélérateur tous les 100 points
+
+const game = {
+  state: "idle",          // idle | run | over
+  speed: SPEED_START,
+  score: 0,
+  hi: +(localStorage.getItem("loup-hi") || 0),
+  fruits: 0,
+  shield: 0,              // charges du chapeau de mousquetaire
+  nextHatAt: 200 + Math.random() * 10, // prochain chapeau (premier vers 200-210)
+  invulUntil: 0,          // invincibilité brève après un coup encaissé
+  t: 0,                   // compteur de frames
+  flashUntil: 0,          // score qui clignote
+  shake: 0,
+};
+
+const wolf = {
+  x: 58,
+  y: 0, vy: 0,
+  ducking: false,
+  onGround: true,
+  get spr() {
+    if (game.state === "over") return SPR.wolfDead;
+    if (!this.onGround) return SPR.wolfJump;
+    if (this.ducking) return (game.t >> 3) % 2 ? SPR.duckA : SPR.duckB;
+    if (game.state === "idle") return SPR.wolfA;
+    return (game.t >> 3) % 2 ? SPR.wolfA : SPR.wolfB;
+  },
+};
+wolf.y = GROUND_Y - SPR.wolfA.height;
+
+let obstacles = [];   // {x, spr, type, w, h}
+let bonusItems = [];  // {x, y, spr, taken} — fruits & légumes
+let clouds = [];
+let flakes = [];
+let bumps = [];
+let popups = [];      // {x, y, txt, life}
+let nextGap = 500;
+
+for (let i = 0; i < 3; i++) clouds.push({ x: Math.random() * W, y: 28 + Math.random() * 70, v: 0.4 + Math.random() * 0.4 });
+for (let i = 0; i < 45; i++) flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 0.3 + Math.random() * 0.8, drift: Math.random() * 0.4 });
+for (let i = 0; i < 26; i++) bumps.push({ x: Math.random() * W, w: 4 + Math.random() * 14, dy: 4 + Math.random() * 8 });
+
+/* ---------- contrôles ---------- */
+function jump() {
+  if (game.state === "over") { reset(); return; }
+  if (game.state === "idle") game.state = "run";
+  if (wolf.onGround && !wolf.ducking) {
+    wolf.vy = -12;
+    wolf.onGround = false;
+    sfx.jump();
+  }
+}
+addEventListener("keydown", (e) => {
+  if (e.code === "Space" || e.code === "ArrowUp") {
+    e.preventDefault();
+    initAudio();
+    jump();
+  } else if (e.code === "ArrowDown") {
+    e.preventDefault();
+    if (game.state === "run") wolf.ducking = wolf.onGround;
+    if (!wolf.onGround) wolf.vy += 4; // descente rapide
+  }
+});
+addEventListener("keyup", (e) => {
+  if (e.code === "ArrowDown") wolf.ducking = false;
+});
+cv.addEventListener("pointerdown", () => { initAudio(); jump(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && game.state === "run") game.state = "idle";
+});
+
+/* ---------- spawn ---------- */
+function spawnObstacle() {
+  const s = game.score;
+  const roll = Math.random();
+  let type;
+  if (s > 400 && roll < 0.22) type = "bird";
+  else if (s > 150 && roll < 0.40) type = "caddie";
+  else if (roll < 0.62) type = "lapinS";
+  else if (roll < 0.84) type = "lapinL";
+  else type = s > 300 ? "cluster" : (roll < 0.92 ? "lapinS" : "lapinL");
+
+  if (type === "bird") {
+    const hauteurs = [GROUND_Y - 30 - SPR.birdA.height, GROUND_Y - 78 - SPR.birdA.height + 24, GROUND_Y - 112 - SPR.birdA.height];
+    const y = hauteurs[Math.floor(Math.random() * hauteurs.length)];
+    obstacles.push({ x: W + 40, y, type: "bird", w: SPR.birdA.width, h: SPR.birdA.height, vx: 1.2 });
+  } else if (type === "cluster") {
+    // une famille de lapins
+    const n = 2 + (Math.random() < 0.4 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const spr = Math.random() < 0.5 ? SPR.lapinS : SPR.lapinL;
+      obstacles.push({ x: W + 40 + i * (spr.width - 6), y: GROUND_Y - spr.height + 2, type: "lapin", spr, w: spr.width, h: spr.height, vx: 0 });
+    }
+  } else {
+    const spr = type === "caddie" ? SPR.caddie : (type === "lapinS" ? SPR.lapinS : SPR.lapinL);
+    obstacles.push({ x: W + 40, y: GROUND_Y - spr.height + 2, type, spr, w: spr.width, h: spr.height, vx: 0 });
+  }
+
+  // parfois un fruit ou légume flottant entre deux obstacles
+  if (Math.random() < 0.30) {
+    const spr = Math.random() < 0.5 ? SPR.carotte : SPR.pomme;
+    bonusItems.push({ x: W + 40 + nextGap * 0.5, y: GROUND_Y - 72 - Math.random() * 30, spr, kind: "fruit", taken: false });
+  }
+
+  // le chapeau de mousquetaire : entre deux obstacles, si le loup est nu-tête,
+  // au premier passage du seuil (≈200-210, puis tous les 200 à 400 points)
+  if (game.score >= game.nextHatAt && game.shield === 0 &&
+      !bonusItems.some(i => i.kind === "chapeau")) {
+    bonusItems.push({ x: W + 40 + nextGap * 0.5, y: GROUND_Y - 80 - Math.random() * 30, spr: SPR.chapeau, kind: "chapeau", taken: false });
+    game.nextHatAt = game.score + 200 + Math.random() * 200;
+  }
+  nextGap = 300 + Math.random() * 260 + game.speed * 16;
+}
+
+/* ---------- collisions ---------- */
+function hitboxes() {
+  const spr = wolf.spr;
+  if (wolf.ducking && wolf.onGround && game.state === "run") {
+    return [{ x: wolf.x + 6, y: wolf.y + 6, w: spr.width - 16, h: spr.height - 10 }];
+  }
+  // deux boîtes : le corps, et la tête (le museau dépasse à droite)
+  return [
+    { x: wolf.x + 12, y: wolf.y + 24, w: 48, h: spr.height - 28 },
+    { x: wolf.x + 51, y: wolf.y, w: spr.width - 53, h: 36 },
+  ];
+}
+function collide(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/* ---------- reset ---------- */
+function reset() {
+  game.state = "run";
+  game.speed = SPEED_START;
+  game.score = 0;
+  game.fruits = 0;
+  game.shield = 0;
+  game.nextHatAt = 200 + Math.random() * 10;
+  game.invulUntil = 0;
+  obstacles = [];
+  bonusItems = [];
+  popups = [];
+  wolf.vy = 0;
+  wolf.ducking = false;
+  wolf.onGround = true;
+  wolf.y = GROUND_Y - SPR.wolfA.height;
+  nextGap = 500;
+}
+
+/* ---------- update ---------- */
+function update() {
+  game.t++;
+
+  // neige et nuages bougent même sur l'écran d'accueil
+  for (const f of flakes) {
+    f.y += f.v;
+    f.x -= f.drift + (game.state === "run" ? game.speed * 0.12 : 0.1);
+    if (f.y > H) { f.y = -4; f.x = Math.random() * W; }
+    if (f.x < -4) f.x = W + 4;
+  }
+  for (const c of clouds) {
+    c.x -= c.v + (game.state === "run" ? game.speed * 0.06 : 0);
+    if (c.x < -SPR.nuage.width) { c.x = W + 30; c.y = 24 + Math.random() * 80; }
+  }
+
+  if (game.state !== "run") return;
+
+  game.speed = Math.min(SPEED_MAX, game.speed + SPEED_ACCEL);
+  const prevCent = Math.floor(game.score / 100);
+  game.score += game.speed * 0.028;
+  if (Math.floor(game.score / 100) > prevCent) {
+    sfx.milestone();
+    game.flashUntil = game.t + 24;
+    game.speed = Math.min(SPEED_MAX, game.speed + SPEED_BUMP);
+  }
+
+  // physique du loup
+  if (!wolf.onGround) {
+    wolf.vy += 0.65;
+    wolf.y += wolf.vy;
+    const floor = GROUND_Y - wolf.spr.height;
+    if (wolf.y >= floor) { wolf.y = floor; wolf.vy = 0; wolf.onGround = true; }
+  }
+  if (wolf.onGround) wolf.y = GROUND_Y - wolf.spr.height;
+
+  // sol
+  for (const b of bumps) {
+    b.x -= game.speed;
+    if (b.x < -20) { b.x = W + Math.random() * 60; b.w = 4 + Math.random() * 14; b.dy = 4 + Math.random() * 8; }
+  }
+
+  // obstacles
+  nextGap -= game.speed;
+  if (nextGap <= 0) spawnObstacle();
+  for (const o of obstacles) o.x -= game.speed + (o.vx || 0);
+  obstacles = obstacles.filter(o => o.x > -80);
+
+  // fruits & légumes
+  for (const ga of bonusItems) {
+    ga.x -= game.speed;
+    ga.y += Math.sin(game.t * 0.1 + ga.x * 0.02) * 0.4;
+  }
+  bonusItems = bonusItems.filter(g => g.x > -40 && !g.taken);
+
+  // popups
+  for (const p of popups) { p.y -= 0.7; p.life--; }
+  popups = popups.filter(p => p.life > 0);
+
+  // collisions
+  const boxes = hitboxes();
+  if (game.t >= game.invulUntil) {
+    for (const o of obstacles) {
+      const ob = { x: o.x + 3, y: o.y + 3, w: o.w - 6, h: o.h - 5 };
+      if (boxes.some(b => collide(b, ob))) {
+        if (game.shield > 0) {
+          game.shield--;
+          game.invulUntil = game.t + 40;
+          sfx.bouclier();
+          popups.push({ x: wolf.x + 70, y: wolf.y - 16, txt: "TOUS POUR UN", life: 55, color: PAL.A });
+          break;
+        }
+        // touche fatale : le loup hurle
+        popups.push({ x: wolf.x + 70, y: wolf.y - 20, txt: "AHOUUUUU !", life: 9999, color: PAL.A });
+        gameOver();
+        return;
+      }
+    }
+  }
+  for (const ga of bonusItems) {
+    const gb = { x: ga.x, y: ga.y, w: ga.spr.width, h: ga.spr.height };
+    if (boxes.some(b => collide(b, gb))) {
+      ga.taken = true;
+      if (ga.kind === "chapeau") {
+        game.shield = 2; // 2 touches encaissées, la 3e est fatale
+        sfx.chapeau();
+        popups.push({ x: wolf.x + 70, y: wolf.y - 16, txt: "CHAPEAU !", life: 70, color: PAL.A });
+      } else {
+        game.fruits++;
+        game.score += 50;
+        sfx.bonus();
+        popups.push({ x: ga.x, y: ga.y - 8, txt: "+50", life: 50 });
+      }
+    }
+  }
+
+  // nuit / jour
+  frame.classList.toggle("night", Math.floor(game.score / 600) % 2 === 1);
+}
+
+function gameOver() {
+  game.state = "over";
+  game.shake = 12;
+  sfx.mort();
+  if (game.score > game.hi) {
+    game.hi = Math.floor(game.score);
+    localStorage.setItem("loup-hi", game.hi);
+  }
+}
+
+/* ---------- rendu ---------- */
+function pad(n) { return String(Math.floor(n)).padStart(5, "0"); }
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // ciel
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, W, H);
+
+  // montagnes lointaines
+  ctx.fillStyle = "#ececec";
+  ctx.beginPath();
+  ctx.moveTo(0, GROUND_Y);
+  ctx.lineTo(90, 150); ctx.lineTo(200, GROUND_Y);
+  ctx.lineTo(330, 170); ctx.lineTo(470, GROUND_Y);
+  ctx.lineTo(620, 140); ctx.lineTo(790, GROUND_Y);
+  ctx.closePath();
+  ctx.fill();
+
+  // nuages
+  for (const c of clouds) ctx.drawImage(SPR.nuage, c.x | 0, c.y | 0);
+
+  // neige
+  ctx.fillStyle = "#d4d4d8";
+  for (const f of flakes) ctx.fillRect(f.x | 0, f.y | 0, 2, 2);
+
+  // tremblement à la mort
+  let sx = 0, sy = 0;
+  if (game.shake > 0) {
+    sx = (Math.random() - 0.5) * game.shake;
+    sy = (Math.random() - 0.5) * game.shake;
+    game.shake *= 0.82;
+    if (game.shake < 0.5) game.shake = 0;
+  }
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // sol
+  ctx.fillStyle = PAL.K;
+  ctx.fillRect(0, GROUND_Y, W, 2);
+  for (const b of bumps) ctx.fillRect(b.x | 0, GROUND_Y + b.dy, b.w, 2);
+
+  // fruits & légumes
+  for (const ga of bonusItems) ctx.drawImage(ga.spr, ga.x | 0, ga.y | 0);
+
+  // obstacles
+  for (const o of obstacles) {
+    if (o.type === "bird") {
+      const spr = (game.t >> 4) % 2 ? SPR.birdA : SPR.birdB;
+      ctx.drawImage(spr, o.x | 0, o.y | 0);
+    } else {
+      ctx.drawImage(o.spr, o.x | 0, o.y | 0);
+    }
+  }
+
+  // le loup (clignote pendant l'invincibilité)
+  const invul = game.state === "run" && game.t < game.invulUntil;
+  if (!invul || (game.t >> 2) % 2) {
+    ctx.drawImage(wolf.spr, wolf.x | 0, wolf.y | 0);
+    // le chapeau de mousquetaire doré, plume au vent
+    if (game.shield > 0) {
+      const hx = wolf.x + (wolf.ducking && wolf.onGround ? 41 : 29);
+      ctx.drawImage(SPR.chapeau, hx | 0, (wolf.y - 26) | 0);
+    }
+  }
+
+  ctx.restore();
+
+  // score
+  const flash = game.t < game.flashUntil && (game.t >> 2) % 2;
+  ctx.font = "11px 'Press Start 2P', monospace";
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#b9b9bf";
+  ctx.fillText("HI " + pad(game.hi), W - 122, 28);
+  if (!flash) {
+    ctx.fillStyle = PAL.K;
+    ctx.fillText(pad(game.score), W - 18, 28);
+  }
+
+  // compteur de fruits & légumes
+  ctx.drawImage(SPR.bonusUI, 18, 12);
+  ctx.textAlign = "left";
+  ctx.fillStyle = PAL.V;
+  ctx.fillText("x" + game.fruits, 42, 28);
+
+  // charges du chapeau
+  if (game.shield > 0) {
+    ctx.drawImage(SPR.chapeauUI, 80, 8);
+    ctx.fillStyle = PAL.A;
+    ctx.fillText("x" + game.shield, 130, 28);
+  }
+
+  // popups (+50, CHAPEAU !, TOUS POUR UN…)
+  ctx.textAlign = "center";
+  for (const p of popups) {
+    ctx.fillStyle = p.color || PAL.V;
+    ctx.globalAlpha = Math.min(1, p.life / 25);
+    ctx.fillText(p.txt, p.x | 0, p.y | 0);
+  }
+  ctx.globalAlpha = 1;
+
+  // écrans
+  if (game.state === "idle") {
+    ctx.textAlign = "center";
+    ctx.fillStyle = PAL.K;
+    ctx.font = "13px 'Press Start 2P', monospace";
+    ctx.fillText("LE LOUP MAL-AIMÉ", W / 2, 92);
+    if ((game.t >> 5) % 2) {
+      ctx.font = "9px 'Press Start 2P', monospace";
+      ctx.fillStyle = "#8a8a92";
+      ctx.fillText("APPUYEZ SUR ESPACE POUR COURIR", W / 2, 124);
+    }
+  } else if (game.state === "over") {
+    ctx.textAlign = "center";
+    ctx.fillStyle = PAL.K;
+    ctx.font = "15px 'Press Start 2P', monospace";
+    ctx.fillText("G A M E  O V E R", W / 2, 88);
+    ctx.font = "9px 'Press Start 2P', monospace";
+    ctx.fillStyle = "#8a8a92";
+    ctx.fillText("MÊME PAS MAL. ESPACE POUR REJOUER", W / 2, 118);
+    // bouton restart pixel
+    drawRestart(W / 2, 150);
+  }
+}
+
+function drawRestart(cx, cy) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = PAL.K;
+  // anneau
+  ctx.beginPath();
+  ctx.arc(0, 0, 16, 0.6, Math.PI * 2 + 0.1);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = PAL.K;
+  ctx.stroke();
+  // flèche
+  ctx.beginPath();
+  ctx.moveTo(16, -10);
+  ctx.lineTo(26, 2);
+  ctx.lineTo(10, 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/* ---------- boucle ---------- */
+if (location.hash.startsWith("#test")) {
+  game.state = "run"; game.score = 480; game.speed = 8;
+  if (location.hash.includes("s")) game.shield = 2;
+  const n = +(location.hash.replace(/\D/g, "")) || 120;
+  for (let i = 0; i < n; i++) update();
+}
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
