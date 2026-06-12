@@ -327,17 +327,21 @@ const POMME = [
 ];
 
 const CHAPEAU = [
-  "...WWW................",
-  ".WWWWWWW..............",
-  "WWWFWWWWW.............",
-  ".WWWFWWWWW............",
-  "..WWWFWWWW.AAAAAA.....",
-  "....WWFWWWAAAAAAAA....",
-  "......WWWAAAAAAAAA....",
-  ".......WAAAAAAAAAA....",
-  ".........AAAAAAAAAA...",
+  ".WW...................",
+  "WWWW..................",
+  "WWFWW.................",
+  ".WWFWW................",
+  ".WWFWW................",
+  "..WWFWW...............",
+  "..WWFWW...............",
+  "...WWFW...............",
+  "...WWWW...AAAAAA......",
+  "....WWW..AAAAAAAA.....",
+  "....WWW.AAAAAAAAA.....",
+  ".....WWAAAAAAAAAA.....",
+  "......AAAAAAAAAAA.....",
   "AAAAAAAAAAAAAAAAAAAAAA",
-  "...CCCCCCCCCCCCCCCC...",
+  "..CCCCCCCCCCCCCCCCCC..",
 ];
 
 const NUAGE = [
@@ -432,6 +436,7 @@ const game = {
   invulUntil: 0,          // invincibilité brève après un coup encaissé
   t: 0,                   // compteur de frames
   flashUntil: 0,          // score qui clignote
+  overAt: 0,              // frame de la mort — verrouille le restart
   shake: 0,
 };
 
@@ -464,7 +469,11 @@ for (let i = 0; i < 26; i++) bumps.push({ x: Math.random() * W, w: 4 + Math.rand
 
 /* ---------- contrôles ---------- */
 function jump() {
-  if (game.state === "over") { reset(); return; }
+  if (game.state === "over") {
+    // le jeu reste stoppé : pas de relance avant 1 seconde
+    if (game.t - game.overAt > 60) reset();
+    return;
+  }
   if (game.state === "idle") game.state = "run";
   if (wolf.onGround && !wolf.ducking) {
     wolf.vy = -12;
@@ -671,6 +680,7 @@ function update() {
 
 function gameOver() {
   game.state = "over";
+  game.overAt = game.t;
   game.shake = 12;
   sfx.mort();
   if (game.score > game.hi) {
@@ -742,7 +752,7 @@ function draw() {
     // le chapeau de mousquetaire doré, plume au vent
     if (game.shield > 0) {
       const hx = wolf.x + (wolf.ducking && wolf.onGround ? 41 : 29);
-      ctx.drawImage(SPR.chapeau, hx | 0, (wolf.y - 26) | 0);
+      ctx.drawImage(SPR.chapeau, hx | 0, (wolf.y - 36) | 0);
     }
   }
 
@@ -767,7 +777,7 @@ function draw() {
 
   // charges du chapeau
   if (game.shield > 0) {
-    ctx.drawImage(SPR.chapeauUI, 80, 8);
+    ctx.drawImage(SPR.chapeauUI, 80, 4);
     ctx.fillStyle = PAL.A;
     ctx.fillText("x" + game.shield, 130, 28);
   }
@@ -797,9 +807,11 @@ function draw() {
     ctx.fillStyle = PAL.K;
     ctx.font = "15px 'Press Start 2P', monospace";
     ctx.fillText("G A M E  O V E R", W / 2, 88);
-    ctx.font = "9px 'Press Start 2P', monospace";
-    ctx.fillStyle = "#8a8a92";
-    ctx.fillText("MÊME PAS MAL. ESPACE POUR REJOUER", W / 2, 118);
+    if (game.t - game.overAt > 60) {
+      ctx.font = "9px 'Press Start 2P', monospace";
+      ctx.fillStyle = "#8a8a92";
+      ctx.fillText("MÊME PAS MAL. ESPACE POUR REJOUER", W / 2, 118);
+    }
     // bouton restart pixel
     drawRestart(W / 2, 150);
   }
